@@ -2,6 +2,7 @@ import Foundation
 import TuistCore
 import TuistGraph
 import TuistSupport
+import TSCBasic
 
 protocol TargetLinting: AnyObject {
     func lint(target: Target) -> [LintingIssue]
@@ -41,6 +42,7 @@ class TargetLinter: TargetLinting {
         issues.append(contentsOf: validateCoreDataModelsExist(target: target))
         issues.append(contentsOf: validateCoreDataModelVersionsExist(target: target))
         issues.append(contentsOf: lintMergeableLibrariesOnlyAppliesToDynamicTargets(target: target))
+        issues.append(contentsOf: lintAllRequiredFilesAvailable(target: target))
         for script in target.scripts {
             issues.append(contentsOf: targetScriptLinter.lint(script))
         }
@@ -322,6 +324,35 @@ class TargetLinter: TargetLinting {
             )]
         }
         return []
+    }
+
+    private func lintAllRequiredFilesAvailable(target: Target) -> [LintingIssue] {
+        var lintingIssues: [LintingIssue] = []
+
+        lintingIssues.append(contentsOf: lintFiles(paths: target.sources.map { $0.path }))
+
+        if target.supportsResources {
+            lintingIssues.append(contentsOf: lintFiles(paths: target.resources.resources.map { $0.path }))
+            lintingIssues.append(contentsOf: lintFiles(paths: target.copyFiles.flatMap(\.files).map { $0.path }))
+        }
+
+        return lintingIssues
+    }
+
+    private func lintFiles(paths: [AbsolutePath]) -> [LintingIssue] {
+        var lintingIssues: [LintingIssue] = []
+
+        for path in paths {
+            if !FileHandler.shared.exists(path) {
+                lintingIssues.append(LintingIssue(reason: "No files found at: \(path)", severity: .warning))
+                continue
+            }
+
+            if FileHandler.shared.isFolder(path) && !FileHandler.shared.exists(path) {
+                lintingIssues.append(LintingIssue(reason: "No folder found at: \(path)", severity: .warning))
+            }
+        }
+        return lintingIssues
     }
 }
 
